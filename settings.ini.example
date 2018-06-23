@@ -1,17 +1,12 @@
 [html]
-page_title = Change your password on example.org
+page_title = Change your LDAP password
 
 [ldap]
 host = localhost
-port = 636
-use_ssl = true
+port = 389
+use_ssl = false
 base = ou=People,dc=example,dc=org
 search_filter = uid={uid}
-
-# Uncomment for AD / Samba 4
-#type = ad
-#ad_domain = ad.example.org
-#search_filter = sAMAccountName={uid}
 
 [server]
 server = auto

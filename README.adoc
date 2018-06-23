@@ -12,22 +12,6 @@ It’s built with http://bottlepy.org[Bottle], a WSGI micro web-framework for Py
 
 == Installation
 
-=== Alpine Linux
-
-. Install package *ldap-passwd-webui-waitress* from the Alpine’s community repository:
-+
-[source, sh]
-apk add ldap-passwd-webui-waitress
-+
-IMPORTANT: This package is in Alpine stable since v3.7. You can also install it from _edge_ (unstable) branch.
-
-. Adjust configuration in `/etc/ldap-passwd-webui.ini` and `/etc/conf.d/`.
-
-. Start service ldap-passwd-webui:
-+
-[source]
-/etc/init.d/ldap-passwd-webui start
-
 === Manually
 
 Clone this repository and install dependencies:
@@ -44,6 +28,11 @@ Read the next sections to learn how to run it.
 === Requirements
 
 * Python 3.x
+----
+yum install epel-release
+yum install python34
+yum install uwsgi-plugin-python3
+----
 * {pypi-url}/bottle/[bottle]
 * {pypi-url}/ldap3[ldap3] 2.x
 
@@ -75,14 +64,6 @@ Then you can access the app on http://localhost:8080.
 The port and host may be changed in link:settings.ini.example[settings.ini].
 
 
-=== Run with Waitress
-
-[source, sh, subs="+attributes"]
-----
-cd {proj-name}
-waitress-serve --listen=*:8080 app:application
-----
-
 === Run with uWSGI and nginx
 
 If you have many micro-apps like this, it’s IMO kinda overkill to run each in a separate uWSGI process, isn’t it?
@@ -93,35 +74,52 @@ It’s not so well known, but uWSGI allows to “mount” multiple application i
 ----
 [uwsgi]
 plugins = python3
-socket = /run/uwsgi/main.sock
-chdir = /var/www/scripts
-logger = file:/var/log/uwsgi/main.log
-processes = 1
-threads = 2
-# map URI paths to applications
-mount = /admin/{proj-name}={proj-name}/app.py
-#mount = /admin/change-world=change-world/app.py
+socket = /zserver/uwsgi/run/main.sock
+uid = uwsgi
+chown-socket = uwsgi:nginx
+chmod-socket = 660
+chdir = /zserver/uwsgi
+logto = /zserver/uwsgi/var/log/main.log
+mount = /changepass=/zserver/uwsgi/ldap-passwd-webui/app.py
 manage-script-name = true
+processes = 4
+threads = 2
 ----
 
 [source, nginx]
 .Sample nginx configuration as a reverse proxy in front of uWSGI:
 ----
+upstream uwsgi_app {
+    server unix:/zserver/uwsgi/run/main.sock;
+}
 server {
-    listen 443 ssl;
-    server_name example.org;
+    listen 80;
+    server_name 192.168.156.133;
 
-    ssl_certificate     /etc/ssl/nginx/nginx.crt;
-    ssl_certificate_key /etc/ssl/nginx/nginx.key;
-
-    # uWSGI scripts
-    location /admin/ {
-        uwsgi_pass  unix:/run/uwsgi/main.sock;
+    location /changepass/ {
+        uwsgi_pass uwsgi_app;
         include     uwsgi_params;
     }
 }
 ----
 
+.Sample systemd script for uwsgi service /etc/systemd/system/uwsgi.service
+----
+[Unit]
+Description=uWSGI instance to serve ldap-passwd-webui
+
+[Service]
+ExecStartPre=/usr/bin/bash -c 'chown uwsgi:nginx /zserver/uwsgi/run'
+ExecStart=/usr/bin/bash -c 'cd /zserver/uwsgi; uwsgi --ini app.ini'
+Restart=always
+KillSignal=SIGQUIT
+Type=notify
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
+
+----
 == Screenshot
 
 image::doc/screenshot.png[]
